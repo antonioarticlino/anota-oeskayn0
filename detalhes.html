@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Descrição do Item</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      font-family: 'Press Start 2P', cursive;
+      background-color: #000;
+      background-size: 64px;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 100vw;
+      height: 100vh;
+      padding: 60px;
+      box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.85);
+      border: 6px solid #3e3e3e;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    h2 {
+      text-align: center;
+      color: #8fff5f;
+      text-shadow: 2px 2px #000;
+      font-size: 28px;
+      margin-bottom: 30px;
+    }
+
+    #info {
+      font-size: 18px;
+      margin-bottom: 25px;
+      line-height: 2;
+      max-width: 1000px;
+      text-align: center;
+    }
+
+    textarea {
+      width: 90%;
+      max-width: 1000px;
+      height: 200px;
+      padding: 16px;
+      font-size: 18px;
+      border: 4px solid #000;
+      background: #c2b280;
+      color: #000;
+      resize: vertical;
+      box-shadow: inset 3px 3px #1f1f1f;
+      font-family: 'Press Start 2P', monospace;
+    }
+
+    .btn {
+      margin-top: 25px;
+      padding: 16px 32px;
+      font-size: 18px;
+      font-weight: bold;
+      background: #00aa00;
+      color: white;
+      border: 4px solid #000;
+      cursor: pointer;
+      transition: 0.2s;
+      box-shadow: 3px 3px #1f1f1f;
+      font-family: 'Press Start 2P', cursive;
+    }
+
+    .btn:hover {
+      transform: scale(1.08);
+      filter: brightness(1.1);
+    }
+
+    .voltar {
+      display: inline-block;
+      margin-top: 40px;
+      font-size: 18px;
+      color: #8fff5f;
+      text-decoration: none;
+      transition: 0.3s;
+      font-family: 'Press Start 2P', cursive;
+    }
+
+    .voltar:hover {
+      transform: scale(1.08);
+      text-shadow: 0 0 6px #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📝 Descrição do Item</h2>
+    <div id="info">Carregando dados...</div>
+    <textarea id="descricao" placeholder="Escreva aqui a descrição do item..."></textarea>
+    <button class="btn" id="btnSalvar" onclick="salvarDescricao()">💾 Salvar Descrição</button>
+    <a href="index.html" class="voltar">⬅️ Voltar ao painel principal</a>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // === Firebase (alinhado com as outras páginas) ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyDyGbrlrxWmcNj9Tm2ZWWa7gvvoil4lyrI",
+      authDomain: "joabe-anotacoes.firebaseapp.com",
+      projectId: "joabe-anotacoes",
+      storageBucket: "joabe-anotacoes.appspot.com",
+      messagingSenderId: "50670952443",
+      appId: "1:50670952443:web:67880481e8aadec981355e",
+      measurementId: "G-E68TLB4Z1G"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // === Helpers: data e moeda ===
+    const brl = (n) =>
+      Number.isFinite(n) ? new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(n) : '—';
+
+    function asDate(stored) {
+      if (!stored) return null;
+      if (typeof stored?.toDate === 'function') return stored.toDate();               // Firestore Timestamp
+      if (typeof stored?.seconds === 'number') return new Date(stored.seconds * 1000); // Timestamp cru
+      if (typeof stored === 'number') return new Date(stored);                        // millis
+      if (typeof stored === 'string') return new Date(stored);                        // ISO/string
+      if (stored instanceof Date) return stored;                                      // Date
+      return null;
+    }
+    function formatBRDate(stored) {
+      const d = asDate(stored);
+      return d && !isNaN(d.getTime()) ? d.toLocaleDateString('pt-BR') : '—';
+    }
+
+    // === Query param ===
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    const info = document.getElementById("info");
+    const descEl = document.getElementById("descricao");
+    const btnSalvar = document.getElementById("btnSalvar");
+
+    if (!id) {
+      info.textContent = "ID não informado. Volte ao painel e tente novamente.";
+      btnSalvar.disabled = true;
+      descEl.disabled = true;
+      throw new Error("Missing id param");
+    }
+
+    const ref = doc(db, "itens", id);
+
+    async function carregarDescricao() {
+      try {
+        const docSnap = await getDoc(ref);
+        if (!docSnap.exists()) {
+          info.textContent = "Item não encontrado.";
+          btnSalvar.disabled = true;
+          descEl.disabled = true;
+          return;
+        }
+
+        const dados = docSnap.data();
+
+        const nome = dados.nome ?? "—";
+        const categoria = dados.categoria ?? "—";
+        const dataCompra = formatBRDate(dados.dataCompra);
+        const compra = Number.isFinite(dados.compra) ? brl(dados.compra) : "—";
+        const venda = Number.isFinite(dados.venda) ? brl(dados.venda) : "Ainda não vendido";
+
+        info.innerHTML = `
+          <strong>🧾 Nome:</strong> ${nome}<br>
+          <strong>📦 Categoria:</strong> ${categoria}<br>
+          <strong>📅 Data Compra:</strong> ${dataCompra}<br>
+          <strong>💰 Compra:</strong> ${compra}<br>
+          <strong>💵 Venda:</strong> ${venda}
+        `;
+
+        descEl.value = dados.descricao || "";
+      } catch (e) {
+        console.error(e);
+        info.textContent = "Erro ao carregar dados. Tente novamente.";
+      }
+    }
+
+    async function salvarDescricao() {
+      try {
+        btnSalvar.disabled = true;
+        const original = btnSalvar.textContent;
+        btnSalvar.textContent = "💾 Salvando...";
+
+        const texto = descEl.value.trim();
+        await updateDoc(ref, { descricao: texto });
+
+        btnSalvar.textContent = "✅ Salvo!";
+        setTimeout(() => {
+          btnSalvar.textContent = original;
+          btnSalvar.disabled = false;
+        }, 800);
+      } catch (e) {
+        console.error(e);
+        alert("Falha ao salvar a descrição. Verifique sua conexão e tente de novo.");
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = "💾 Salvar Descrição";
+      }
+    }
+
+    carregarDescricao();
+    window.salvarDescricao = salvarDescricao;
+  </script>
+</body>
+</html>
